@@ -104,7 +104,7 @@ def flashWrite(ser, req):
 
 
 def main():
-    ser = serial.Serial('COM6', baudrate=38400, timeout=1)
+    ser = serial.Serial('COM5', baudrate=38400, timeout=1)
 
     while True:
         data = ser.read(2)

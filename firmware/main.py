@@ -230,6 +230,16 @@ async def uart_listener():
     # await logger.log("Disconnectinv client: " + str(reader.get_extra_info('peername')))
 
 
+async def receiveMsg(stream):
+    len = (await stream.read(1))[0]
+    data = await stream.read(len)
+    return data
+
+async def sendMsg(stream, data):
+    stream.write(bytes([len(data)]))
+    stream.write(data)
+    await stream.drain()
+
 @coroutine
 async def firmware_server(tcpreader, tcpwriter):
     await logger.log("Firmware client connected: " + str(tcpreader.get_extra_info('peername')))
@@ -241,21 +251,15 @@ async def firmware_server(tcpreader, tcpwriter):
 
         buf = bytearray(256)
         while True:
-            print("Listening TCP")
-            len = await tcpreader.readinto(buf)
-            if buf:
-#                print("TCP->UART: " + ' '.join('{:02x}'.format(buf[i]) for i in range(len)))
-                print("TCP->UART: " + str(len))
-                ur.write(buf[:len])
-                await ur.drain()
+            # print("Listening TCP")
+            data = await receiveMsg(tcpreader)
+            # print("TCP->UART: " + str(len(data)))
+            await sendMsg(ur, data)
 
-            print("Listening UART")
-            len = await ur.readinto(buf)
-            if len:
-                # print("UART->TCP: " + ' '.join('{:02x}'.format(buf[i]) for i in range(len)))
-                print("UART->TCP: " + str(len))
-                tcpwriter.write(buf[:len])
-                await tcpwriter.drain()
+            # print("Listening UART")           
+            data = await receiveMsg(ur)
+            # print("UART->TCP: " + str(len(data)))
+            await sendMsg(tcpwriter, data)
 
 
 @coroutine

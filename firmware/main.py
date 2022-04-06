@@ -172,64 +172,6 @@ async def uart_listener():
             await logger.log("UART message: " + line)
 
 
-
-# def calcCRC(data):
-#     res = 0
-#     for b in data:
-#         res ^= b
-    
-#     return res
-
-# async def parseGetChipIdMessage(s, data):
-#     # respond with JN5169 chip ID
-#     resp = struct.pack('>BBIB', 6, 0x33, 0x0000b686, 5)
-#     await logger.log("Sending response: " + str(resp))
-#     s.write(resp)
-#     # crc = struct.pack("<B", calcCRC(resp))
-#     # await logger.log("Sending CRC: " + str(crc))
-#     # s.write(crc)
-
-
-# async def parseMemReadMessage(s, data):
-#     addr, size = struct.unpack('<IH', data)
-#     await logger.log("Reading addr: " + str(addr) + "  size=" + str(size))
-
-
-#@coroutine
-# async def firmware_server(reader, writer):
-#     await logger.log("Firmware client connected: " + str(reader.get_extra_info('peername')))
-
-    # print("Aquiring UART")
-    # async with UartManager(UartMode.PROGRAMMING_UART) as uart:
-    #     print("UART aquired")
-    #     ur = asyncio.StreamReader(uart)
-
-    #     while True:
-    #         await logger.log("")
-    #         await logger.log("Waiting a message header")
-    #         data = await ur.read(2)
-    #         if not data:
-    #             continue
-
-    #         msglen, msgtype = struct.unpack('BB', data)
-    #         await logger.log("Received message: " + str(msgtype))
-    #         await logger.log("Message length: " + str(msglen))
-
-    #         await logger.log("Waiting the rest of the message")
-    #         data = await ur.read(msglen - 1)
-
-    #         if msgtype == 0x1f:
-    #             await parseMemReadMessage(ur, data)
-    #         elif msgtype == 0x32:
-    #             await parseGetChipIdMessage(ur, data)
-    #         else:
-    #             await logger.log("Unsupported message type: " + str(msgtype))
-
-
-    # await asyncio.sleep(5)
-    # await logger.log("Disconnectinv client: " + str(reader.get_extra_info('peername')))
-
-
 async def receiveMsg(stream):
     len = (await stream.read(1))[0]
     data = await stream.read(len)

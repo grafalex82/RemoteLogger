@@ -6,18 +6,6 @@ import machine
 import network
 import webrepl
 import uos
-import struct
-
-
-def singleton(cls):
-    instance = None
-    def getinstance(*args, **kwargs):
-        nonlocal instance
-        if instance is None:
-            instance = cls(*args, **kwargs)
-            return instance
-        return instance(*args, **kwargs)
-    return getinstance
 
 
 class UartMode:
@@ -26,7 +14,6 @@ class UartMode:
     PROGRAMMING_UART = 2
 
 
-@singleton
 class UartManager:
     UART_CFG = {
         UartMode.USB_UART: {'baudrate': 115200},
@@ -34,36 +21,44 @@ class UartManager:
         UartMode.PROGRAMMING_UART: {'baudrate': 38400, 'tx': machine.Pin(15), 'rx': machine.Pin(13), 'rxbuf': 1024, 'timeout': 100}
     }
 
-    def __init__(self, mode = None):
+    def __init__(self):
         self.mutex = asyncio.Lock()
         self.mode = None
-        self.switchUart(mode)
+        self.uart = self.getUart(UartMode.USB_UART)
 
 
-    def __call__(self, mode):
-        self.switchUart(mode)
-        return self
+    async def acquire(self):
+        await self.mutex.acquire()
 
 
-    def switchUart(self, mode):
+    def release(self):
+        self.mutex.release()
+
+
+    def getUart(self, mode):
         if self.mode != mode:
             print("Switch to UART mode " + str(mode))
-            cfg = self.UART_CFG[mode]
+            cfg = UartManager.UART_CFG[mode]
             self.uart = machine.UART(0, **cfg)
             self.mode = mode
 
-
-    def getUart(self):
         return self.uart
 
 
-    async def __aenter__(self):
-        await self.mutex.acquire()
-        return self.getUart()
+uart_manager = UartManager()
 
+
+class ScopedUart:
+    def __init__(self, mode):
+        self.mode = mode
+
+    async def __aenter__(self):
+        await uart_manager.acquire()
+        return uart_manager.getUart(self.mode)
 
     async def __aexit__(self, *args):
-        self.mutex.release()
+        uart_manager.release()
+
 
 
 class RemoteLogger():
@@ -90,7 +85,7 @@ logger = RemoteLogger()
 
 def halt(err):
     print("Swapping back to USB UART")
-    uart = UartManager(UartMode.USB_UART).getUart()
+    uart = uart_manager.getUart(UartMode.USB_UART)
     uos.dupterm(uart, 1)
 
     print("Fatal error: " + err)
@@ -165,7 +160,7 @@ def swapUART():
 @coroutine
 async def uart_listener():
     while True:
-        async with UartManager(UartMode.LOGGING_UART) as uart:
+        async with ScopedUart(UartMode.LOGGING_UART) as uart:
             reader = asyncio.StreamReader(uart)
             data = yield from reader.readline()
             line = data.decode().rstrip()
@@ -186,22 +181,27 @@ async def sendMsg(stream, data):
 async def firmware_server(tcpreader, tcpwriter):
     await logger.log("Firmware client connected: " + str(tcpreader.get_extra_info('peername')))
 
-    print("Aquiring UART")
-    async with UartManager(UartMode.PROGRAMMING_UART) as uart:        
-        print("UART aquired")
-        ur = asyncio.StreamReader(uart)
+    try:
+        print("Aquiring UART")
+        async with ScopedUart(UartMode.PROGRAMMING_UART) as uart:        
+            print("UART aquired")
+            ur = asyncio.StreamReader(uart)
 
-        buf = bytearray(256)
-        while True:
-            # print("Listening TCP")
-            data = await receiveMsg(tcpreader)
-            # print("TCP->UART: " + str(len(data)))
-            await sendMsg(ur, data)
+            buf = bytearray(256)
+            while True:
+                # print("Listening TCP")
+                data = await receiveMsg(tcpreader)
+                # print("TCP->UART: " + str(len(data)))
+                await sendMsg(ur, data)
 
-            # print("Listening UART")           
-            data = await receiveMsg(ur)
-            # print("UART->TCP: " + str(len(data)))
-            await sendMsg(tcpwriter, data)
+                # print("Listening UART")           
+                data = await receiveMsg(ur)
+                # print("UART->TCP: " + str(len(data)))
+                await sendMsg(tcpwriter, data)
+    except Exception as e:
+        await logger.log("Exception: " + str(e))
+
+    await logger.log("Firmware client disconnected: " + str(tcpreader.get_extra_info('peername')))
 
 
 @coroutine

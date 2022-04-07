@@ -177,6 +177,11 @@ async def sendMsg(stream, data):
     stream.write(data)
     await stream.drain()
 
+async def xferMsg(src, dst):
+    data = await receiveMsg(src)
+    await sendMsg(dst, data)
+
+
 @coroutine
 async def firmware_server(tcpreader, tcpwriter):
     await logger.log("Firmware client connected: " + str(tcpreader.get_extra_info('peername')))
@@ -185,22 +190,19 @@ async def firmware_server(tcpreader, tcpwriter):
         print("Aquiring UART")
         async with ScopedUart(UartMode.PROGRAMMING_UART) as uart:        
             print("UART aquired")
-            ur = asyncio.StreamReader(uart)
+            uartstream = asyncio.StreamReader(uart)
 
-            buf = bytearray(256)
             while True:
-                # print("Listening TCP")
-                data = await receiveMsg(tcpreader)
-                # print("TCP->UART: " + str(len(data)))
-                await sendMsg(ur, data)
+                await asyncio.wait_for(xferMsg(tcpreader, uartstream), timeout=15)
+                await asyncio.wait_for(xferMsg(uartstream, tcpwriter), timeout=5)
 
-                # print("Listening UART")           
-                data = await receiveMsg(ur)
-                # print("UART->TCP: " + str(len(data)))
-                await sendMsg(tcpwriter, data)
     except Exception as e:
-        await logger.log("Exception: " + str(e))
+        await logger.log("Exception: " + repr(e))
 
+    tcpreader.close()
+    await tcpreader.wait_closed()
+    tcpwriter.close()
+    await tcpwriter.wait_closed()
     await logger.log("Firmware client disconnected: " + str(tcpreader.get_extra_info('peername')))
 
 

@@ -158,13 +158,16 @@ def swapUART():
 
 
 @coroutine
-async def uart_listener():
+async def uartListener():
     while True:
         async with ScopedUart(UartMode.LOGGING_UART) as uart:
-            reader = asyncio.StreamReader(uart)
-            data = yield from reader.readline()
-            line = data.decode().rstrip()
-            await logger.log("UART message: " + line)
+            try:
+                reader = asyncio.StreamReader(uart)
+                data = await asyncio.wait_for(reader.readline(), timeout=1)
+                line = data.decode().rstrip()
+                await logger.log("UART message: " + line)
+            except asyncio.TimeoutError:
+                pass
 
 
 async def receiveMsg(stream):
@@ -182,27 +185,29 @@ async def xferMsg(src, dst):
     await sendMsg(dst, data)
 
 
+async def programingLoop(tcpreader, tcpwriter):
+    async with ScopedUart(UartMode.PROGRAMMING_UART) as uart:        
+        uartstream = asyncio.StreamReader(uart)
+
+        while True:
+            await asyncio.wait_for(xferMsg(tcpreader, uartstream), timeout=15)
+            await asyncio.wait_for(xferMsg(uartstream, tcpwriter), timeout=5)
+
+
 @coroutine
-async def firmware_server(tcpreader, tcpwriter):
+async def firmwareServer(tcpreader, tcpwriter):
     await logger.log("Firmware client connected: " + str(tcpreader.get_extra_info('peername')))
 
     try:
-        print("Aquiring UART")
-        async with ScopedUart(UartMode.PROGRAMMING_UART) as uart:        
-            print("UART aquired")
-            uartstream = asyncio.StreamReader(uart)
-
-            while True:
-                await asyncio.wait_for(xferMsg(tcpreader, uartstream), timeout=15)
-                await asyncio.wait_for(xferMsg(uartstream, tcpwriter), timeout=5)
-
+        await programingLoop(tcpreader, tcpwriter)
     except Exception as e:
-        await logger.log("Exception: " + repr(e))
+        await logger.log("Programming Exception: " + repr(e))
 
     tcpreader.close()
     await tcpreader.wait_closed()
     tcpwriter.close()
     await tcpwriter.wait_closed()
+
     await logger.log("Firmware client disconnected: " + str(tcpreader.get_extra_info('peername')))
 
 
@@ -217,13 +222,12 @@ async def main():
     await logger.connect(config['server'], config['port'])
     webrepl.start()
     swapUART()
-    #asyncio.create_task(uart_listener())
+    asyncio.create_task(uartListener())
 
     for i in range(10, 0, -1):
         await logger.log("Starting firmware server in " + str(i) + " seconds")
         await asyncio.sleep(1)
-    await asyncio.start_server(firmware_server, "0.0.0.0", 5169)
-    #asyncio.create_task(firmware_server())
+    await asyncio.start_server(firmwareServer, "0.0.0.0", 5169)
 
     i = 0
     while True:

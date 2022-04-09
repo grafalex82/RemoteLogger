@@ -82,6 +82,28 @@ class RemoteLogger():
 logger = RemoteLogger()
 
 
+targetMisoPin = machine.Pin(12, value=True, mode=machine.Pin.OUT)  # D6 pin on Wemos D1 Mini
+targetResetPin = machine.Pin(14, value=True, mode=machine.Pin.OUT) # D5 pin on Wemos D1 Mini
+
+async def resetTargetForFlashing():
+    await logger.log("Resetting target device to flashing mode")
+
+    targetMisoPin.off()
+    targetResetPin.off()
+    await asyncio.sleep_ms(20)  # 1 us is basically enough (as per datasheet)
+    targetResetPin.on()
+    await asyncio.sleep_ms(200) # 180 us is basically enough, but let the bootloader to start
+
+
+async def resetTargetIntoFirmware():
+    await logger.log("Resetting target device to normal mode")
+
+    targetMisoPin.on()
+    targetResetPin.off()
+    await asyncio.sleep_ms(20)  # 1 us is basically enough (as per datasheet)
+    targetResetPin.on()         # target device will be ready to start in 180 us. No waiting from our side is needed
+
+
 
 def halt(err):
     print("Swapping back to USB UART")
@@ -199,9 +221,12 @@ async def firmwareServer(tcpreader, tcpwriter):
     await logger.log("Firmware client connected: " + str(tcpreader.get_extra_info('peername')))
 
     try:
+        await resetTargetForFlashing()
         await programingLoop(tcpreader, tcpwriter)
     except Exception as e:
         await logger.log("Programming Exception: " + repr(e))
+
+    await resetTargetIntoFirmware()
 
     tcpreader.close()
     await tcpreader.wait_closed()
@@ -222,12 +247,15 @@ async def main():
     await logger.connect(config['server'], config['port'])
     webrepl.start()
     swapUART()
+
     asyncio.create_task(uartListener())
 
     for i in range(10, 0, -1):
         await logger.log("Starting firmware server in " + str(i) + " seconds")
         await asyncio.sleep(1)
     await asyncio.start_server(firmwareServer, "0.0.0.0", 5169)
+
+    await resetTargetIntoFirmware()
 
     i = 0
     while True:

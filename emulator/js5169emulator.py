@@ -1,7 +1,8 @@
-import asyncio
 import serial
 import struct
+import argparse
 
+verbose = False
 
 def calcCRC(data):
     res = 0
@@ -15,10 +16,11 @@ def sendMessage(ser, msgtype, data):
     msg = struct.pack("<BB", len(data) + 2, msgtype)
     msg += data
     msg += calcCRC(msg  ).to_bytes(1, 'big')
-    
-    print("Sending: " + ' '.join('{:02x}'.format(x) for x in msg))
-    ser.write(msg)
 
+    if verbose:    
+        print("Sending: " + ' '.join('{:02x}'.format(x) for x in msg))
+
+    ser.write(msg)
 
 
 def getChipId(ser, req):
@@ -87,7 +89,10 @@ def changeBaudRate(ser, req):
 def ramWrite(ser, req):
     addr = struct.unpack("<I", req[0:4])
     data = req[4:]
-    print("MESSAGE: RAM write at addr={:08x}: ".format(addr[0]) + ' '.join('{:02x}'.format(x) for x in data))
+
+    print("MESSAGE: RAM write at addr={:08x}".format(addr[0]))
+    if verbose:
+        print(": " + ' '.join('{:02x}'.format(x) for x in data))
 
     resp = struct.pack("<B", 0)
     sendMessage(ser, 0x1e, resp)
@@ -96,15 +101,34 @@ def ramWrite(ser, req):
 def flashWrite(ser, req):
     addr = struct.unpack("<I", req[0:4])
     data = req[4:]
-    print("MESSAGE: Flash write at addr={:08x}: ".format(addr[0]) + ' '.join('{:02x}'.format(x) for x in data))
+
+    print("MESSAGE: Flash write at addr={:08x}".format(addr[0]))
+    if verbose:
+        print(": " + ' '.join('{:02x}'.format(x) for x in data))
 
     resp = struct.pack("<B", 0)
     sendMessage(ser, 0x0a, resp)
 
 
+def dumpMessage(msglen, msgtype, data):
+    if not verbose:
+        return
+
+    print()
+    print("Received: " + "{:02x} {:02x} ".format(msglen, msgtype) + ' '.join('{:02x}'.format(x) for x in data))
+    
 
 def main():
-    ser = serial.Serial('COM5', baudrate=38400, timeout=1)
+    parser = argparse.ArgumentParser(description="Flash NXP JN5169 device")
+    parser.add_argument("port", help="Serial port")
+    parser.add_argument("-v", "--verbose", action='store_true', help="Set verbose mode")
+    args = parser.parse_args()
+    
+    global verbose
+    verbose = args.verbose
+
+    print("Starting NXP JN5169 emulator on " + args.port)
+    ser = serial.Serial(args.port, baudrate=38400, timeout=1)
 
     while True:
         data = ser.read(2)
@@ -112,12 +136,8 @@ def main():
             continue
 
         msglen, msgtype = struct.unpack('BB', data)
-        print()
-        print("Message length: " + str(msglen))
-        print("Message type: {:02x}".format(msgtype))
-
         data = ser.read(msglen - 1)
-        print("Received: " + "{:02x} {:02x} ".format(msglen, msgtype) + ' '.join('{:02x}'.format(x) for x in data))
+        dumpMessage(msglen, msgtype, data)
 
         if msgtype == 0x32:
             getChipId(ser, data[:-1])

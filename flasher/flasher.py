@@ -148,13 +148,29 @@ def flashFirmware(ser, firmware):
 
         flashWrite(ser, addr, firmware[addr:addr+chunklen])
 
-def main():
 
+def writeFirmware(ser, filename):
+    # Load a file to flash
+    with open(filename, "rb") as f:
+        firmware = f.read()
+    check(firmware[0:4] == b'\x0f\x03\x00\x0b', "Incorrect firmware format")
+    firmware = firmware[4:]
+
+
+    # Flash the firmware
+    setFlashType(ser)
+    eraseFlash(ser)
+    flashFirmware(ser, firmware)
+    reset(ser)
+
+
+def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Flash NXP JN5169 device")
     parser.add_argument("-p", "--port", help="Serial port")
     parser.add_argument("-s", "--server", help="Remote flashing server")
-    parser.add_argument("-f", "--file", required=True, help="Firmware file to flash")
+    parser.add_argument("action", choices=["read", "write", "verify"], help="Action to perform: read, write, verify")
+    parser.add_argument("file", help="Firmware file to flash")
     args = parser.parse_args()
 
     # Validate parameters
@@ -165,13 +181,6 @@ def main():
     if args.port and args.server:
         print("You can use either serial port or remote flashing server")
         sys.exit(1)
-
-    # Load a file to flash
-    with open(args.file, "rb") as f:
-        firmware = f.read()
-    check(firmware[0:4] == b'\x0f\x03\x00\x0b', "Incorrect firmware format")
-    firmware = firmware[4:]
-
 
     # Open connection
     if args.port:
@@ -186,10 +195,12 @@ def main():
     mac = getMAC(ser)
     print("Effective device MAC address: " + ':'.join('{:02x}'.format(x) for x in mac))
 
-    # Flash the firmware
-    setFlashType(ser)
-    eraseFlash(ser)
-    flashFirmware(ser, firmware)
-    reset(ser)
+    if args.action == "write":
+        writeFirmware(ser, args.file)
+    if args.action == "read":
+        print("Reading firmware is not implemented")
+    if args.action == "verify":
+        print("Verifying firmware is not implemented")
+
 
 main()

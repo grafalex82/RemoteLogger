@@ -89,12 +89,32 @@ def setFlashType(ser):
     check(status[0] == 0, "Wrong status on select internal flash")
 
 
-def getMAC(ser):
-    print("Requesting device MAC address")
-    req = struct.pack("<IH", 0x01001570, 8) # Mac address is located at 0x01001570
+def readMemory(ser, addr, len):
+    req = struct.pack("<IH", addr, len)
     resp = sendRequest(ser, 0x1f, req)
-    check(resp[0] == 0, "Wrong status on read MAC address")
-    return [x for x in resp[1:8]]
+    check(resp[0] == 0, "Wrong status on read RAM request")
+    return [x for x in resp[1:1+len]]
+
+
+def getUserMAC(ser):
+    print("Requesting device User MAC address")
+    mac = readMemory(ser, 0x01001570, 8)
+    print("Device User MAC address: " + ':'.join('{:02x}'.format(x) for x in mac))
+    return mac
+
+
+def getFactoryMAC(ser):
+    print("Requesting device Factory MAC address")
+    mac = readMemory(ser, 0x01001580, 8)
+    print("Device Factory MAC address: " + ':'.join('{:02x}'.format(x) for x in mac))
+    return mac
+
+
+def getMAC(ser):
+    mac = getUserMAC(ser)
+    if mac == [0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]:
+        mac = getFactoryMAC(ser)
+    return mac
 
 
 def eraseFlash(ser):
@@ -164,7 +184,7 @@ def main():
     # Prepare the target device
     getChipId(ser)
     mac = getMAC(ser)
-    print("Device MAC address: " + ':'.join('{:02x}'.format(x) for x in mac))
+    print("Effective device MAC address: " + ':'.join('{:02x}'.format(x) for x in mac))
 
     # Flash the firmware
     setFlashType(ser)

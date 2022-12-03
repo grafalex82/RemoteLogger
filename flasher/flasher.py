@@ -89,7 +89,7 @@ def setFlashType(ser):
     check(status[0] == 0, "Wrong status on select internal flash")
 
 
-def readMemory(ser, addr, len):
+def readRAM(ser, addr, len):
     req = struct.pack("<IH", addr, len)
     resp = sendRequest(ser, 0x1f, req)
     check(resp[0] == 0, "Wrong status on read RAM request")
@@ -98,14 +98,14 @@ def readMemory(ser, addr, len):
 
 def getUserMAC(ser):
     print("Requesting device User MAC address")
-    mac = readMemory(ser, 0x01001570, 8)
+    mac = readRAM(ser, 0x01001570, 8)
     print("Device User MAC address: " + ':'.join('{:02x}'.format(x) for x in mac))
     return mac
 
 
 def getFactoryMAC(ser):
     print("Requesting device Factory MAC address")
-    mac = readMemory(ser, 0x01001580, 8)
+    mac = readRAM(ser, 0x01001580, 8)
     print("Device Factory MAC address: " + ':'.join('{:02x}'.format(x) for x in mac))
     return mac
 
@@ -131,7 +131,7 @@ def reset(ser):
     check(status[0] == 0, "Wrong status on reset device")
 
 
-def flashWrite(ser, addr, chunk):
+def writeFlash(ser, addr, chunk):
     print("Writing flash at addr {:08x}".format(addr))
     req = struct.pack("<I", addr)
     req += chunk
@@ -140,13 +140,12 @@ def flashWrite(ser, addr, chunk):
     check(resp[0] == 0, "Wrong status on write flash command")
 
 
-def flashFirmware(ser, firmware):
-    for addr in range(0, len(firmware), 0x80):
-        chunklen = len(firmware) - addr
-        if chunklen > 0x80:
-            chunklen = 0x80
-
-        flashWrite(ser, addr, firmware[addr:addr+chunklen])
+def readFlash(ser, addr, len):
+    print("Reading flash at addr {:08x}".format(addr))
+    req = struct.pack("<IH", addr, len)
+    resp = sendRequest(ser, 0x0b, req)
+    check(resp[0] == 0, "Wrong status on read flash request")
+    return resp[1:1+len]
 
 
 def loadFirmwareFile(filename):
@@ -161,10 +160,44 @@ def loadFirmwareFile(filename):
 def writeFirmware(ser, filename):
     firmware = loadFirmwareFile(filename)
 
-    # Flash the firmware
+    # Prepare flash
     setFlashType(ser)
     eraseFlash(ser)
-    flashFirmware(ser, firmware)
+
+    # Flash data
+    for addr in range(0, len(firmware), 0x80):
+        chunklen = len(firmware) - addr
+        if chunklen > 0x80:
+            chunklen = 0x80
+
+        writeFlash(ser, addr, firmware[addr:addr+chunklen])
+
+    # Finalize and reset the device into the firmware
+    reset(ser)
+
+
+def verifyFirmware(ser, filename):
+    firmware = loadFirmwareFile(filename)
+
+    # Prepare the flash
+    setFlashType(ser)
+
+    # Verify flash data
+    errors = False
+    for addr in range(0, len(firmware), 0x80):
+        chunklen = len(firmware) - addr
+        if chunklen > 0x80:
+            chunklen = 0x80
+
+        chunk = readFlash(ser, addr, chunklen)
+
+        if chunk != firmware[addr:addr+chunklen]:
+            print("Firmware verification failed: data different at addr {:08x}".format(addr))
+            errors = True
+
+    print("Firmware verification " + ("failed" if errors else "successful"))
+
+    # Finalize and reset the device into the firmware
     reset(ser)
 
 
@@ -204,7 +237,7 @@ def main():
     if args.action == "read":
         print("Reading firmware is not implemented")
     if args.action == "verify":
-        print("Verifying firmware is not implemented")
+        verifyFirmware(ser, args.file)
 
 
 main()

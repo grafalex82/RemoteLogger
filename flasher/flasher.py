@@ -61,11 +61,23 @@ def sendRequest(ser, msgtype, data):
 def getChipId(ser):
     print("Requesting Chip ID")
     resp = sendRequest(ser, 0x32, b'')
-    status, chipId = struct.unpack('>BI', resp)
-    print("Received chip ID {:08x} (Status={:02x})".format(chipId, status))
+
+    bootloaderVer = None
+    if len(resp) == 5:
+        status, chipId = struct.unpack('>BI', resp)
+    else:
+        status, chipId, bootloaderVer = struct.unpack('>BII', resp)
+
+    print("Received chip ID {:08x}, Bootloader={:08x} (Status={:02x})".format(chipId, bootloaderVer, status))
+
+    # Chip ID structure
+    #define CHIP_ID_MANUFACTURER_ID_MASK    0x00000fff
+    #define CHIP_ID_PART_MASK               0x003ff000
+    #define CHIP_ID_MASK_VERSION_MASK       0x0fc00000
+    #define CHIP_ID_REV_MASK                0xf0000000
 
     check(status == 0, "Wrong status on get Chip ID request")
-    check(chipId == 0x0000b686, "Unsupported chip ID")   # Support only JN5169 for now
+    check(chipId & 0x003fffff == 0x0000b686, "Unsupported chip ID")   # Support only JN5169 for now
     return chipId
 
 

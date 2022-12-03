@@ -157,6 +157,13 @@ def loadFirmwareFile(filename):
     return firmware
 
 
+def saveFirmwareFile(filename, content):
+    # Load a file to flash
+    with open(filename, "w+b") as f:
+        #f.write(b'\x0f\x03\x00\x0b')
+        f.write(content)
+
+
 def writeFirmware(ser, filename):
     firmware = loadFirmwareFile(filename)
 
@@ -201,6 +208,22 @@ def verifyFirmware(ser, filename):
     reset(ser)
 
 
+def readFirmware(ser, filename):
+    # Prepare flash
+    setFlashType(ser)
+
+    # Flash data
+    firmware = b''
+    for addr in range(0, 512*1024, 0x80):
+        firmware += readFlash(ser, addr, 0x80)
+
+    # Finalize and reset the device into the firmware
+    reset(ser)
+
+    # Save downloaded firmware content
+    saveFirmwareFile(filename, firmware)
+
+
 def main():
     # Parse command line arguments
     parser = argparse.ArgumentParser(description="Flash NXP JN5169 device")
@@ -235,7 +258,7 @@ def main():
     if args.action == "write":
         writeFirmware(ser, args.file)
     if args.action == "read":
-        print("Reading firmware is not implemented")
+        readFirmware(ser, args.file)
     if args.action == "verify":
         verifyFirmware(ser, args.file)
 

@@ -149,13 +149,17 @@ def flashFirmware(ser, firmware):
         flashWrite(ser, addr, firmware[addr:addr+chunklen])
 
 
-def writeFirmware(ser, filename):
+def loadFirmwareFile(filename):
     # Load a file to flash
     with open(filename, "rb") as f:
         firmware = f.read()
     check(firmware[0:4] == b'\x0f\x03\x00\x0b', "Incorrect firmware format")
     firmware = firmware[4:]
+    return firmware
 
+
+def writeFirmware(ser, filename):
+    firmware = loadFirmwareFile(filename)
 
     # Flash the firmware
     setFlashType(ser)

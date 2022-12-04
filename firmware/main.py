@@ -89,6 +89,7 @@ async def resetTargetForFlashing():
     await logger.log("Resetting target device to flashing mode")
 
     targetMisoPin.off()
+    await asyncio.sleep_ms(10)  # Just wait a little bit
     targetResetPin.off()
     await asyncio.sleep_ms(20)  # 1 us is basically enough (as per datasheet)
     targetResetPin.on()
@@ -99,6 +100,7 @@ async def resetTargetIntoFirmware():
     await logger.log("Resetting target device to normal mode")
 
     targetMisoPin.on()
+    await asyncio.sleep_ms(10)  # Just wait a little bit
     targetResetPin.off()
     await asyncio.sleep_ms(20)  # 1 us is basically enough (as per datasheet)
     targetResetPin.on()         # target device will be ready to start in 180 us. No waiting from our side is needed
@@ -208,9 +210,17 @@ async def xferMsg(src, dst):
 
 
 async def programingLoop(tcpreader, tcpwriter):
-    async with ScopedUart(UartMode.PROGRAMMING_UART) as uart:        
+    async with ScopedUart(UartMode.PROGRAMMING_UART) as uart:
         uartstream = asyncio.StreamReader(uart)
+        await logger.log("Ackquired programming UART, flush input UART buffer")        
 
+        # Flush the input buffer if it has some pending bytes
+        try:
+            await asyncio.wait_for(uartstream.read(1024), timeout=1)
+        except:
+            pass
+
+        # Tramsfer packets between TCP and UART
         while True:
             await asyncio.wait_for(xferMsg(tcpreader, uartstream), timeout=15)
             await asyncio.wait_for(xferMsg(uartstream, tcpwriter), timeout=5)

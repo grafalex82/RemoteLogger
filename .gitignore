@@ -1,1 +1,2 @@
-firmware/config.txt
+firmware/config.txt*
+*.log

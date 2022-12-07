@@ -96,6 +96,25 @@ def readRAM(ser, addr, len):
     return [x for x in resp[1:1+len]]
 
 
+def writeRAM(ser, addr, data):
+    req = struct.pack("<I", addr)
+    req += data
+    resp = sendRequest(ser, 0x1d, req)
+    check(resp[0] == 0, "Wrong status on read RAM request")
+
+
+def getSettings(ser):
+    print("Requesting device customer settings")
+    settings = readRAM(ser, 0x01001510, 16)
+    print("Device settings: " + ':'.join('{:02x}'.format(x) for x in settings))
+    return settings
+
+
+def resetSettings(ser):
+    print("Resetting device customer settings")
+    writeRAM(ser, 0x01001510, b'\xff')
+
+
 def getUserMAC(ser):
     print("Requesting device User MAC address")
     mac = readRAM(ser, 0x01001570, 8)
@@ -170,6 +189,7 @@ def writeFirmware(ser, filename):
     # Prepare flash
     setFlashType(ser)
     eraseFlash(ser)
+    #resetSettings(ser)
 
     # Flash data
     for addr in range(0, len(firmware), 0x80):
@@ -209,6 +229,9 @@ def verifyFirmware(ser, filename):
 
 
 def readFirmware(ser, filename):
+
+    getSettings(ser)
+
     # Prepare flash
     setFlashType(ser)
 

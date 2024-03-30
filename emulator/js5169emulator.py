@@ -15,7 +15,7 @@ def sendMessage(ser, msgtype, data):
     # Message header and data
     msg = struct.pack("<BB", len(data) + 2, msgtype)
     msg += data
-    msg += calcCRC(msg  ).to_bytes(1, 'big')
+    msg += calcCRC(msg).to_bytes(1, 'big')
 
     if verbose:    
         print("Sending: " + ' '.join('{:02x}'.format(x) for x in msg))

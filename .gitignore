@@ -1,2 +1,3 @@
 firmware/config.txt*
 *.log
+.vscode

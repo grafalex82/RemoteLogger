@@ -60,7 +60,6 @@ class ScopedUart:
         uart_manager.release()
 
 
-
 class RemoteLogger():
     def __init__(self):
         self.writer = None
@@ -140,6 +139,7 @@ async def blink():
     while True:
         led(not led()) # Fast blinking if no connection
         await asyncio.sleep_ms(1000 if not fastBlinking else 150)
+
 
 def readConfig():
     print("Reading configuration...") 
@@ -267,7 +267,6 @@ async def main():
 
     await resetTargetIntoFirmware()
 
-    i = 0
     while True:
         gc.collect()  # For RAM stats.
         mem_free = gc.mem_free()
